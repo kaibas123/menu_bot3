@@ -39,9 +39,8 @@ client.on("messageCreate", async (message) => {
 
         if (parts[0] === "메뉴추천") {
             let isR5 = restaurant && restaurant === 'r5';
-            let data2 = await fetchMenu(dateStr, isR5 ? "r4" : "r5" , Number(isTomorrow), nowTime);
 
-            const allData = Object.assign({}, data.data[time ?? nowTime], data2.data[time ?? nowTime]);
+            const allData = Object.assign({}, data.data["r4"][time ?? nowTime], data.data["r5"][time ?? nowTime], data.data["f"][time ?? nowTime]);
 
             let rests = Object.keys(allData).filter(v => !(v.includes("T/O") || v.includes("사전신청")));
             let random = ~~(Math.random() * rests.length);
@@ -66,10 +65,8 @@ client.on("messageCreate", async (message) => {
             });
         } else {
             if (restaurant === "전체") {
-                let data2 = await fetchMenu(dateStr, "r5", Number(isTomorrow), nowTime);
-
                 msg += "r4:"
-                Object.values(data.data[time ?? nowTime]).forEach(section => {
+                Object.values(data.data["r4"][time ?? nowTime]).forEach(section => {
                     section.forEach(v => {
                         if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
 
@@ -85,7 +82,23 @@ client.on("messageCreate", async (message) => {
                 });
 
                 msg += "\nr5:";
-                Object.values(data2.data[time ?? nowTime]).forEach(section => {
+                Object.values(data.data["r5"][time ?? nowTime]).forEach(section => {
+                    section.forEach(v => {
+                        if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
+
+                        let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
+
+                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
+                            let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
+
+                            if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
+                            msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
+                        });
+                    });
+                });
+
+                msg += "\nf:";
+                Object.values(data.data["f"][time ?? nowTime]).forEach(section => {
                     section.forEach(v => {
                         if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
 
@@ -100,10 +113,8 @@ client.on("messageCreate", async (message) => {
                     });
                 });
             } else if ((restaurant ?? "").toLowerCase() === "to") {
-                let data2 = await fetchMenu(dateStr, "r5", Number(isTomorrow), nowTime);
-
                 msg += "r4:"
-                Object.values(data.data[time ?? nowTime]).forEach(section => {
+                Object.values(data.data["r4"][time ?? nowTime]).forEach(section => {
                     section.forEach(v => {
                         if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
                         v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
@@ -114,7 +125,18 @@ client.on("messageCreate", async (message) => {
                 });
 
                 msg += "\nr5:";
-                Object.values(data2.data[time ?? nowTime]).forEach(section => {
+                Object.values(data.data["r5"][time ?? nowTime]).forEach(section => {
+                    section.forEach(v => {
+                        if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
+                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
+                            if (!i) msg += `\n${v.menuCourseName} : `;
+                            msg += `${i ? "\t\t\t " : ""}${va}\n`;
+                        });
+                    });
+                });
+
+                msg += "\nf:";
+                Object.values(data.data["f"][time ?? nowTime]).forEach(section => {
                     section.forEach(v => {
                         if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
                         v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
@@ -124,7 +146,7 @@ client.on("messageCreate", async (message) => {
                     });
                 });
             } else {
-                let datas = Object.values(data.data[time ?? nowTime]);
+                let datas = Object.values(data.data[parts[1] ?? "r4"][time ?? nowTime]);
 
                 datas.forEach(section => {
                     section.forEach(v => {
@@ -161,6 +183,10 @@ client.on("messageCreate", async (message) => {
             });
         }
     } catch (e) {
+        let data = await fetchMenu(dateStr, restaurant, Number(isTomorrow), nowTime);
+        let datas = Object.values(data.data[parts[1] ?? "r4"][time ?? nowTime])[0][0];
+        console.log(datas);
+
         await message.reply(`불러오기 실패: 시간이나 식당이 잘못되었거나 해당 날짜 ${(time ?? nowTime).toUpperCase()}에 식사가 없습니다.`);
     }
 });

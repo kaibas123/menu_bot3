@@ -269,13 +269,14 @@ client.on("messageCreate", async (message) => {
             });
 
             if (images.length) {
+                let channel = message.channel;
                 try {
                     let buf = await mergeImagesWithTitles(images);
                     let attachment = new AttachmentBuilder(buf, { name: 'menus.png' });
-                    await message.reply({ files: [attachment] });
+                    await channel.send({ files: [attachment] });
                 } catch (err) {
                     console.error('이미지 생성/전송 실패:', err);
-                    await message.reply(`이미지 생성 실패: ${err.message}`);
+                    await channel.send(`이미지 생성 실패: ${err.message}`);
                 }
             }
         }

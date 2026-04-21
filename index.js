@@ -134,10 +134,10 @@ async function getTakeIn(arr) {
         section.forEach(v => {
             if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
 
-            if (v.image && !v.image.includes("planeat")) {
+            if (v.image) {
                 images.push({
                     "title": v.menuCourseName,
-                    "path": v.image
+                    "path": v.image.includes("planeat") ? v.image.replace("http://planeatchoice.net", "https://welplan.pmh.codes/img/planeat") : v.image.replace("http://samsungwelstory.com", "https://welplan.pmh.codes/img/welstory")
                 });
             }
 
@@ -244,6 +244,7 @@ client.on("messageCreate", async (message) => {
                 ti = await getTakeIn(data.data["f"][time ?? nowTime]);
                 msg += "\nf:";
                 msg += ti[0];
+                images.push(ti[1]);
             } else if ((restaurant ?? "").toLowerCase() === "to") {
                 msg += "r4:"
                 msg += await getTakeOut(data.data["r4"][time ?? nowTime]);
@@ -256,7 +257,7 @@ client.on("messageCreate", async (message) => {
             } else {
                 let ti = await getTakeIn(data.data[parts[1] ?? "r4"][time ?? nowTime]);
 
-                if (ti[1].length) images.push(ti[1]);
+                images.push(ti[1]);
                 msg += ti[0];
                 msg += await getTakeOut(data.data[parts[1] ?? "r4"][time ?? nowTime]);
             }

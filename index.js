@@ -1,11 +1,175 @@
 require("dotenv").config();
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, AttachmentBuilder } = require("discord.js");
 const { addMenu, getMenu } = require("./db");
 const { fetchMenu } = require("./menu");
+const axios = require('axios');
+const { createCanvas, loadImage } = require('canvas');
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
+
+async function fetchImageBuffer(url) {
+    const res = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+        headers: {
+            'User-Agent': 'Mozilla/5.0'
+        }
+    });
+
+    return Buffer.from(res.data);
+}
+
+async function mergeImagesWithTitles(items) {
+    const padding = 20;
+    const gap = 20;
+    const titleHeight = 40;
+
+    const cols = items.reduce((acc, v) => acc = acc < v.length ? v.length : acc, 0);
+    const imageWidth = 300;
+    const imageHeight = 300;
+
+    const loaded = [];
+
+    let i = -1;
+    for (const item of items) {
+        i++;
+        loaded[i] = [];
+
+        for (const it of item) {
+            try {
+                console.log('[다운로드 시도]', it.path);
+
+                const buffer = await fetchImageBuffer(it.path);
+                const image = await loadImage(buffer);
+
+                loaded[i].push({
+                    title: it.title || '제목 없음',
+                    image
+                });
+
+                console.log('[로드 성공]', it.path, image.width, image.height);
+            } catch (err) {
+                console.error('[로드 실패]', it.path, err.message);
+            }
+        }
+    }
+
+    if (!loaded.length) {
+        throw new Error('사용 가능한 이미지를 하나도 불러오지 못했습니다.');
+    }
+
+    const rows = loaded.length;
+
+    const canvasWidth =
+        padding * 2 +
+        cols * imageWidth +
+        (cols - 1) * gap;
+
+    const canvasHeight =
+        padding * 2 +
+        rows * (titleHeight + imageHeight) +
+        (rows - 1) * gap;
+
+    const canvas = createCanvas(canvasWidth, canvasHeight);
+    const ctx = canvas.getContext('2d');
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+    for (let row = 0; row < loaded.length; row++) {
+        for (let col = 0; col < loaded[row].length; col++) {
+            const { title, image } = loaded[row][col];
+
+            const x = padding + col * (imageWidth + gap);
+            const y = padding + row * (titleHeight + imageHeight + gap);
+
+            // 제목 배경
+            ctx.fillStyle = '#f3f4f6';
+            ctx.fillRect(x, y, imageWidth, titleHeight);
+
+            // 제목 텍스트
+            ctx.fillStyle = '#111111';
+            ctx.font = 'bold 32px Sans';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(title, x + 12, y + titleHeight / 2);
+
+            // cover 방식으로 이미지 꽉 채우기
+            const ratio = Math.max(
+                imageWidth / image.width,
+                imageHeight / image.height
+            );
+
+            const drawWidth = image.width * ratio;
+            const drawHeight = image.height * ratio;
+
+            const drawX = x + (imageWidth - drawWidth) / 2;
+            const drawY = y + titleHeight + (imageHeight - drawHeight) / 2;
+
+            // 이미지 영역 clip
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(x, y + titleHeight, imageWidth, imageHeight);
+            ctx.clip();
+
+            ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+            ctx.restore();
+
+            // 테두리
+            ctx.strokeStyle = '#dddddd';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x, y + titleHeight, imageWidth, imageHeight);
+        }
+    }
+
+    return canvas.toBuffer('image/png');
+}
+
+async function getTakeIn(arr) {
+    let images = [];
+    let msg = "";
+
+    Object.values(arr).forEach(section => {
+        section.forEach(v => {
+            if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
+
+            if (v.image && !v.image.includes("planeat")) {
+                images.push({
+                    "title": v.menuCourseName,
+                    "path": v.image
+                });
+            }
+
+            let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
+
+            v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
+                let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
+
+                if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
+                msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
+            });
+        });
+    });
+
+    return [msg, images];
+}
+
+async function getTakeOut(arr) {
+    let msg = "";
+
+    Object.values(arr).forEach(section => {
+        section.forEach(v => {
+            if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
+            v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
+                if (!i) msg += `\n${v.menuCourseName} : `;
+                msg += `${i ? "\t\t\t " : ""}${va}\n`;
+            });
+        });
+    });
+
+    return msg;
+}
 
 client.on("messageCreate", async (message) => {
     if (message.author.bot) return;
@@ -36,6 +200,7 @@ client.on("messageCreate", async (message) => {
     try {
         let data = await fetchMenu(dateStr, restaurant, Number(isTomorrow), nowTime);
         let msg = "";
+        let images = [];
 
         if (parts[0] === "메뉴추천") {
             let isR5 = restaurant && restaurant === 'r5';
@@ -65,114 +230,35 @@ client.on("messageCreate", async (message) => {
             });
         } else {
             if (restaurant === "전체") {
+                let ti = await getTakeIn(data.data["r4"][time ?? nowTime]);
+
                 msg += "r4:"
-                Object.values(data.data["r4"][time ?? nowTime]).forEach(section => {
-                    section.forEach(v => {
-                        if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
+                msg += ti[0];
+                images.push(ti[1]);
 
-                        let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
-
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
-
-                            if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
-                            msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
-                        });
-                    });
-                });
-
+                ti = await getTakeIn(data.data["r5"][time ?? nowTime]);
                 msg += "\nr5:";
-                Object.values(data.data["r5"][time ?? nowTime]).forEach(section => {
-                    section.forEach(v => {
-                        if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
+                msg += ti[0];
+                images.push(ti[1]);
 
-                        let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
-
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
-
-                            if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
-                            msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
-                        });
-                    });
-                });
-
+                ti = await getTakeIn(data.data["f"][time ?? nowTime]);
                 msg += "\nf:";
-                Object.values(data.data["f"][time ?? nowTime]).forEach(section => {
-                    section.forEach(v => {
-                        if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
-
-                        let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
-
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
-
-                            if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
-                            msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
-                        });
-                    });
-                });
+                msg += ti[0];
             } else if ((restaurant ?? "").toLowerCase() === "to") {
                 msg += "r4:"
-                Object.values(data.data["r4"][time ?? nowTime]).forEach(section => {
-                    section.forEach(v => {
-                        if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            if (!i) msg += `\n${v.menuCourseName} : `;
-                            msg += `${i ? "\t\t\t " : ""}${va}\n`;
-                        });
-                    });
-                });
+                msg += await getTakeOut(data.data["r4"][time ?? nowTime]);
 
                 msg += "\nr5:";
-                Object.values(data.data["r5"][time ?? nowTime]).forEach(section => {
-                    section.forEach(v => {
-                        if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            if (!i) msg += `\n${v.menuCourseName} : `;
-                            msg += `${i ? "\t\t\t " : ""}${va}\n`;
-                        });
-                    });
-                });
+                msg += await getTakeOut(data.data["r5"][time ?? nowTime]);
 
                 msg += "\nf:";
-                Object.values(data.data["f"][time ?? nowTime]).forEach(section => {
-                    section.forEach(v => {
-                        if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            if (!i) msg += `\n${v.menuCourseName} : `;
-                            msg += `${i ? "\t\t\t " : ""}${va}\n`;
-                        });
-                    });
-                });
+                msg += await getTakeOut(data.data["f"][time ?? nowTime]);
             } else {
-                let datas = Object.values(data.data[parts[1] ?? "r4"][time ?? nowTime]);
+                let ti = await getTakeIn(data.data[parts[1] ?? "r4"][time ?? nowTime]);
 
-                datas.forEach(section => {
-                    section.forEach(v => {
-                        if (v.menuCourseName.includes("T/O") || v.menuCourseName.includes("죽")) return;
-
-                        let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
-
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
-
-                            if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
-                            msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
-                        });
-                    });
-                });
-
-                datas.forEach(section => {
-                    section.forEach(v => {
-                        if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
-
-                        v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                            if (!i) msg += `\n${v.menuCourseName} :`;
-                            msg += `${i ? "\t\t\t " : ""}${va}\n`;
-                        });
-                    });
-                });
+                if (ti[1].length) images.push(ti[1]);
+                msg += ti[0];
+                msg += await getTakeOut(data.data[parts[1] ?? "r4"][time ?? nowTime]);
             }
 
             const buffer = Buffer.from(msg, "utf-8");
@@ -181,12 +267,19 @@ client.on("messageCreate", async (message) => {
                 content: (dateStr ? `${dateStr} ${nowTime} 메뉴` : `${isTomorrow ? "내일" : "오늘"} ${nowTime}${(restaurant ?? "").toLowerCase() === "to" ? " T/O" : ""} 메뉴`),
                 files: [{ attachment: buffer, name: `${time ?? nowTime}_menu.txt` }]
             });
+
+            if (images.length) {
+                try {
+                    let buf = await mergeImagesWithTitles(images);
+                    let attachment = new AttachmentBuilder(buf, { name: 'menus.png' });
+                    await message.reply({ files: [attachment] });
+                } catch (err) {
+                    console.error('이미지 생성/전송 실패:', err);
+                    await message.reply(`이미지 생성 실패: ${err.message}`);
+                }
+            }
         }
     } catch (e) {
-        let data = await fetchMenu(dateStr, restaurant, Number(isTomorrow), nowTime);
-        let datas = Object.values(data.data[parts[1] ?? "r4"][time ?? nowTime])[0][0];
-        console.log(datas);
-
         await message.reply(`불러오기 실패: 시간이나 식당이 잘못되었거나 해당 날짜 ${(time ?? nowTime).toUpperCase()}에 식사가 없습니다.`);
     }
 });

@@ -24,7 +24,7 @@ async function fetchImageBuffer(url) {
 async function mergeImagesWithTitles(items) {
     const padding = 20;
     const gap = 20;
-    const titleHeight = 40;
+    const titleHeight = 50;
 
     const cols = items.reduce((acc, v) => acc = acc < v.length ? v.length : acc, 0);
     const imageWidth = 300;

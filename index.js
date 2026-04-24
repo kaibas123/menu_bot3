@@ -196,6 +196,17 @@ client.on("messageCreate", async (message) => {
     koreaTime.setDate(koreaTime.getDate() + Number(isTomorrow));
     let nowDate = koreaTime.toISOString().slice(0, 11);
 
+    if (!parts[1]) {
+        let isRest = false;
+
+        switch(nowDate) {
+            case /.+-01-01/g: case /.+-03-01/g: case /.+-05-05/g: case /.+-06-06/g: case /.+-05-01/g: case /.+-07-17/g: case /.+-10-03/g: case /.+-08-15/g: case /.+-10-09/g: case /.+-12-25/g: isRest = true; break;
+            default: isRest = false;
+        }
+
+        parts[1] = !koreaTime.getDay() || koreaTime.getDay() === 6 || isRest ? "r5" : "r4";
+    }
+
     try {
         let data = await fetchMenu(dateStr, restaurant, Number(isTomorrow), nowTime);
         let takeOutData = await fetchMenu(dateStr, "to", Number(isTomorrow), nowTime);
@@ -252,13 +263,13 @@ client.on("messageCreate", async (message) => {
                 msg += "\nr5:";
                 msg += await getTakeOut(takeOutData.data["r5"][time ?? nowTime]);
             } else {
-                let ti = await getTakeIn(data.data[parts[1] ?? "r4"][time ?? nowTime]);
+                let ti = await getTakeIn(data.data[parts[1]][time ?? nowTime]);
 
                 images.push(ti[1]);
                 msg += ti[0];
 
                 if ((restaurant ?? "").toLowerCase() !== "f") {
-                    msg += await getTakeOut(takeOutData.data[parts[1] ?? "r4"][time ?? nowTime]);
+                    msg += await getTakeOut(takeOutData.data[parts[1]][time ?? nowTime]);
                 }
             }
 

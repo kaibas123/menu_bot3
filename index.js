@@ -185,7 +185,7 @@ client.on("messageCreate", async (message) => {
 
     const now = new Date();
 
-    now.setFullYear(dateArr[0] ?? now.getFullYear());
+    now.setFullYear(!dateArr[0] || dateArr[0] === "" ? now.getFullYear() : dateArr[0]);
     now.setMonth(dateArr[1] ? dataArr[1] - 1 : now.getMonth());
     now.setDate(dateArr[2] ?? now.getDate());
 

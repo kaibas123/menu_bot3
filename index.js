@@ -160,9 +160,8 @@ async function getTakeOut(arr) {
 
     Object.values(arr).forEach(section => {
         section.forEach(v => {
-            if (!v.menuCourseName.includes("T/O") && !v.menuCourseName.includes("죽")) return;
-            v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                if (!i) msg += `\n${v.menuCourseName} : `;
+            v.subMenuTxt.split(/\|\|\s|\|\|/).forEach((va, i) => {
+                if (!i) msg += `\n${v.menuCourseName} : \n`;
                 msg += `${i ? "\t\t\t " : ""}${va}\n`;
             });
         });
@@ -199,6 +198,7 @@ client.on("messageCreate", async (message) => {
 
     try {
         let data = await fetchMenu(dateStr, restaurant, Number(isTomorrow), nowTime);
+        let takeOutData = await fetchMenu(dateStr, "to", Number(isTomorrow), nowTime);
         let msg = "";
         let images = [];
 
@@ -247,19 +247,19 @@ client.on("messageCreate", async (message) => {
                 images.push(ti[1]);
             } else if ((restaurant ?? "").toLowerCase() === "to") {
                 msg += "r4:"
-                msg += await getTakeOut(data.data["r4"][time ?? nowTime]);
+                msg += await getTakeOut(takeOutData.data["r4"][time ?? nowTime]);
 
                 msg += "\nr5:";
-                msg += await getTakeOut(data.data["r5"][time ?? nowTime]);
-
-                msg += "\nf:";
-                msg += await getTakeOut(data.data["f"][time ?? nowTime]);
+                msg += await getTakeOut(takeOutData.data["r5"][time ?? nowTime]);
             } else {
                 let ti = await getTakeIn(data.data[parts[1] ?? "r4"][time ?? nowTime]);
 
                 images.push(ti[1]);
                 msg += ti[0];
-                msg += await getTakeOut(data.data[parts[1] ?? "r4"][time ?? nowTime]);
+
+                if ((restaurant ?? "").toLowerCase() !== "f") {
+                    msg += await getTakeOut(takeOutData.data[parts[1] ?? "r4"][time ?? nowTime]);
+                }
             }
 
             const buffer = Buffer.from(msg, "utf-8");

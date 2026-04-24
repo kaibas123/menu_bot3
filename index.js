@@ -162,7 +162,7 @@ async function getTakeOut(arr) {
         section.forEach(v => {
             v.subMenuTxt.split(/\|\|\s|\|\|/).forEach((va, i) => {
                 if (!i) msg += `\n${v.menuCourseName} : \n`;
-                msg += `${i ? "\t\t\t " : ""}${va}\n`;
+                msg += `${"\t\t\t "}${va}\n`;
             });
         });
     });

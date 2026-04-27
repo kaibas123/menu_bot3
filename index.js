@@ -214,19 +214,18 @@ client.on("messageCreate", async (message) => {
         let images = [];
 
         if (parts[0] === "메뉴추천") {
-            let isR5 = restaurant && restaurant === 'r5';
-
             const allData = Object.assign({}, data.data["r4"][time ?? nowTime], data.data["r5"][time ?? nowTime], data.data["f"][time ?? nowTime]);
 
             let rests = Object.keys(allData).filter(v => !(v.includes("T/O") || v.includes("사전신청")));
             let random = ~~(Math.random() * rests.length);
             let recommended = allData[rests[random]];
+            let nowRest = Object.keys(data.data["r4"][time ?? nowTime]).find(v => v === rests[random]) ? "r4" : (Object.keys(data.data["r5"][time ?? nowTime]).find(v => v === rests[random]) ? "r5" : "f")
 
             recommended.forEach((v, i) => {
                 let allCal = v.nutritionData.reduce((acc, v) => acc + v.calorie, 0);
 
                 v.subMenuTxt.split(/,\s|,/).forEach((va, i) => {
-                    let calorie = v.nutritionData.find(val => val.name === va)?.calorie;
+                    let calorie = v?.calorie;
 
                     if (!i) msg += `\n${v.menuCourseName} : ${allCal ? `(kcal: ${allCal})` : ""}\n`;
                     msg += `${` `.repeat(`${v.menuCourseName} : `.length + 3)}${va} ${calorie ? `(kcal: ${calorie})` : ""}\n`;
@@ -236,7 +235,7 @@ client.on("messageCreate", async (message) => {
             const buffer = Buffer.from(msg, "utf-8");
 
             await message.reply({
-                content: (`${dateStr ?? "오늘"} 메뉴 추천 : \n ${Object.keys(data2.data[time ?? nowTime]).find(v => v === rests[random]) ? "r5" : "r4"} ${rests[random]}`),
+                content: (`${dateStr ?? "오늘"} 메뉴 추천 : \n ${nowRest} ${rests[random]}`),
                 files: [{ attachment: buffer, name: `recommend_menu.txt` }]
             });
         } else {

@@ -91,7 +91,7 @@ async function mergeImagesWithTitles(items) {
 
             // 제목 텍스트
             ctx.fillStyle = '#111111';
-            ctx.font = 'bold 32px Sans';
+            ctx.font = 'bold 24px Sans';
             ctx.textBaseline = 'middle';
             ctx.fillText(title, x + 12, y + titleHeight / 2);
 
@@ -194,15 +194,16 @@ client.on("messageCreate", async (message) => {
     let nowTime = time ? time : (hour >= 13 && !isTomorrow && !dateStr ? "석식" : "중식");
 
     koreaTime.setDate(koreaTime.getDate() + Number(isTomorrow));
-    let nowDate = koreaTime.toISOString().slice(0, 11);
+    let nowDate = koreaTime.toLocaleDateString("en-CA", {timeZone: "Asia/Seoul"}).slice(0, 10);
 
     if (!parts[1]) {
-        let isRest = false;
+        const holidays = [
+            "01-01", "03-01", "05-05", "06-06",
+            "05-01", "07-17", "10-03", "08-15",
+            "10-09", "12-25"
+        ];
 
-        switch(nowDate) {
-            case /.+-01-01/g: case /.+-03-01/g: case /.+-05-05/g: case /.+-06-06/g: case /.+-05-01/g: case /.+-07-17/g: case /.+-10-03/g: case /.+-08-15/g: case /.+-10-09/g: case /.+-12-25/g: isRest = true; break;
-            default: isRest = false;
-        }
+        const isRest = holidays.includes(nowDate.slice(5));
 
         parts[1] = !koreaTime.getDay() || koreaTime.getDay() === 6 || isRest ? "r5" : "r4";
     }
@@ -240,21 +241,28 @@ client.on("messageCreate", async (message) => {
             });
         } else {
             if (restaurant === "전체") {
-                let ti = await getTakeIn(data.data["r4"][time ?? nowTime]);
+                let ti = null;
 
-                msg += "r4:"
-                msg += ti[0];
-                images.push(ti[1]);
+                if (data.data['r4']) {
+                    ti = await getTakeIn(data.data["r4"][time ?? nowTime]);
+                    msg += "r4:"
+                    msg += ti[0];
+                    images.push(ti[1]);
+                }
 
-                ti = await getTakeIn(data.data["r5"][time ?? nowTime]);
-                msg += "\nr5:";
-                msg += ti[0];
-                images.push(ti[1]);
+                if (data.data['r5']) {
+                    ti = await getTakeIn(data.data["r5"][time ?? nowTime]);
+                    msg += "\nr5:";
+                    msg += ti[0];
+                    images.push(ti[1]);
+                }
 
-                ti = await getTakeIn(data.data["f"][time ?? nowTime]);
-                msg += "\nf:";
-                msg += ti[0];
-                images.push(ti[1]);
+                if (data.data['f']) {
+                    ti = await getTakeIn(data.data["f"][time ?? nowTime]);
+                    msg += "\nf:";
+                    msg += ti[0];
+                    images.push(ti[1]);
+                }
             } else if ((restaurant ?? "").toLowerCase() === "to") {
                 msg += "r4:"
                 msg += await getTakeOut(takeOutData.data["r4"][time ?? nowTime]);
@@ -267,7 +275,7 @@ client.on("messageCreate", async (message) => {
                 images.push(ti[1]);
                 msg += ti[0];
 
-                if ((restaurant ?? "").toLowerCase() !== "f") {
+                if ((restaurant ?? "").toLowerCase() !== "f" && Object.values(takeOutData.data).length) {
                     msg += await getTakeOut(takeOutData.data[parts[1]][time ?? nowTime]);
                 }
             }

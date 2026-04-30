@@ -264,11 +264,17 @@ client.on("messageCreate", async (message) => {
                     images.push(ti[1]);
                 }
             } else if ((restaurant ?? "").toLowerCase() === "to") {
-                msg += "r4:"
-                msg += await getTakeOut(takeOutData.data["r4"][time ?? nowTime]);
+                if (takeOutData.data["r4"]) {
+                    msg += "r4:"
+                    msg += await getTakeOut(takeOutData.data["r4"][time ?? nowTime]);
+                }
 
-                msg += "\nr5:";
-                msg += await getTakeOut(takeOutData.data["r5"][time ?? nowTime]);
+                if (takeOutData.data["r5"]) {
+                    msg += "\nr5:";
+                    msg += await getTakeOut(takeOutData.data["r5"][time ?? nowTime]);
+                }
+
+                if (msg === "") return message.reply(`불러오기 실패: 해당 날짜 ${(time ?? nowTime).toUpperCase()}에 테이크 아웃이 없습니다.`);
             } else {
                 let ti = await getTakeIn(data.data[parts[1]][time ?? nowTime]);
 
